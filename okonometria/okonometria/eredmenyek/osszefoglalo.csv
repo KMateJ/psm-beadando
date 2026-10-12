@@ -1,0 +1,15 @@
+"kod","forgatokonyv","becslo","atlag","torzitas","szoras","rmse","auc","megtartott_arany"
+"A","jól specifikált PS-modell","naiv különbség",3.833,1.833,0.042,1.834,,1
+"A","jól specifikált PS-modell","PSM",2.004,0.004,0.028,0.029,0.759,1
+"B","rosszul specifikált PS-modell","naiv különbség",4.172,2.172,0.052,2.172,,1
+"B","rosszul specifikált PS-modell","PSM, lineáris logit",3.96,1.96,0.059,1.961,0.569,1
+"B","rosszul specifikált PS-modell","PSM, helyes specifikáció",2.029,0.029,0.036,0.046,0.746,1
+"C","meg nem figyelt confounder","naiv különbség",3.977,1.977,0.041,1.978,,1
+"C","meg nem figyelt confounder","PSM, U nélkül",3.254,1.254,0.043,1.255,0.67,1
+"C","meg nem figyelt confounder","PSM, U-val",2.005,0.005,0.031,0.031,0.782,1
+"D","nincs overlap","naiv különbség",5.05,3.05,0.034,3.051,,1
+"D","nincs overlap","PSM",2.175,0.175,0.175,0.247,0.957,1
+"D","nincs overlap","PSM, caliper 0,2 szórás",2.013,0.013,0.102,0.103,0.957,0.872
+"E","instrumentum a PS-modellben","naiv különbség",2.493,0.493,0.035,0.495,,1
+"E","instrumentum a PS-modellben","PSM, Z-vel",2.01,0.01,0.145,0.146,0.923,1
+"E","instrumentum a PS-modellben","PSM, Z nélkül",2.001,0.001,0.024,0.024,0.599,1

@@ -1,0 +1,329 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[magyar]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+
+% Jelölő a még hiányzó részekhez
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\indep}{\perp\!\!\!\perp}
+
+% Forgatókönyvenként egy ábrasor (figures/abra-X-1.pdf, az Rmd generálja)
+\newcommand{\abra}[2]{%
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{abra-#1-1.pdf}
+    \caption{#2. Balra: becsült PS egy mintában; középen: |SMD| párosítás előtt és után
+      (szaggatott vonal: 0,1); jobbra: a becslések eloszlása az 5000 ismétlésben (szaggatott vonal: $\tau = 2$).}
+  \end{figure}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+
+\title{\textbf{Propensity score matching:}\\\textbf{módszer, alkalmazások és korlátok}}
+\author{%
+  \todo{Név 1} (\todo{NEPTUN}, \todo{név1@uni-corvinus.hu})\\
+  \todo{Név 2} (\todo{NEPTUN}, \todo{név2@uni-corvinus.hu})\\
+  \todo{Név 3} (\todo{NEPTUN}, \todo{név3@uni-corvinus.hu})}
+\date{2026. október 13.}
+
+\begin{document}
+\maketitle
+
+%======================================================================
+\section*{1. Bevezetés}
+
+A közgazdaságtan egyik alapvető célja különböző beavatkozások (\emph{treatment}) okozati hatásának,
+az átlagos kezelési hatásnak (\emph{Average Treatment Effect}, ATE) a mérése. A standard megoldás
+a randomizált kontrollált kísérlet (\emph{randomized controlled trial}, RCT), ahol a kezelés kiosztása
+véletlenszerű, így a kezelt és a kontrollcsoport várhatóan minden megfigyelt és megfigyelhetetlen
+jellemzőjében megegyezik. A gyakorlatban azonban sokszor csak megfigyeléses adatok állnak
+rendelkezésre, ahol a kezelés felvétele nem véletlen, hanem a résztvevők saját döntésén vagy egyéb
+tényezőkön múlik.
+
+Ilyenkor kiválasztási torzítás (\emph{selection bias}) lép fel, a kezelésre és a kimenetelre egyaránt ható
+zavaró változók (\emph{confounder}-ek) miatt. Ha egyszerűen összehasonlítjuk a kezelt és a nem kezelt
+csoport átlagos kimenetelét, torzított eredményt kapunk, mert a különbség egy része a csoportok
+eredendő különbségeiből fakad. A regressziós kontroll sok változó esetén nehézkes (a dimenzió átka,
+\emph{curse of dimensionality}). A \emph{propensity score matching} (PSM) ezt úgy kezeli, hogy a confoundereket egyetlen változóba, a kezelés valószínűségébe sűríti, és e szerint teszi összehasonlíthatóvá a
+kezelt és a kontroll megfigyeléseket.
+
+%======================================================================
+\section*{2. Módszertan}
+
+\subsection*{2.1 Potenciális kimenetelek és a szelekciós torzítás}
+
+Minden egyénre ($i = 1, \dots, N$) adott a $T_i \in \{0, 1\}$ kezelési indikátor, a megfigyelt confounderek
+$X_i \in \mathbb{R}^p$ vektora, valamint két potenciális kimenetel, $Y_i(1)$ és $Y_i(0)$. A megfigyelt kimenetel
+\[
+  Y_i = T_i\, Y_i(1) + (1 - T_i)\, Y_i(0).
+\]
+A célparaméterek az átlagos kezelési hatás, illetve a kezeltekre vonatkozó átlagos kezelési hatás
+(\emph{Average Treatment Effect on the Treated}, ATT):
+\[
+  \mathrm{ATE} = \E\bigl[Y_i(1) - Y_i(0)\bigr], \qquad
+  \mathrm{ATT} = \E\bigl[Y_i(1) - Y_i(0) \mid T_i = 1\bigr].
+\]
+A megfigyeléses adatokon számolt naiv különbség torzított:
+\begin{align*}
+  \Delta &= \E[Y_i \mid T_i = 1] - \E[Y_i \mid T_i = 0] \\
+         &= \underbrace{\E\bigl[Y_i(1) - Y_i(0) \mid T_i = 1\bigr]}_{\text{ATT}}
+          + \underbrace{\E\bigl[Y_i(0) \mid T_i = 1\bigr] - \E\bigl[Y_i(0) \mid T_i = 0\bigr]}_{\text{szelekciós torzítás}}.
+\end{align*}
+A naiv becslés tehát csak akkor egyezik meg az ATT-vel, ha a szelekciós torzítás nulla. Ez
+randomizált kísérletben garantált, megfigyeléses adatokban a confounderek miatt általában nem
+teljesül.
+
+\subsection*{2.2 Azonosító feltevések}
+
+A megfigyeléses adatokból oksági hatás becsléséhez két feltevés szükséges:
+\begin{enumerate}[nosep]
+  \item \textbf{Feltételes függetlenség} (\emph{unconfoundedness}): $\bigl(Y_i(1), Y_i(0)\bigr) \indep T_i \mid X_i$.
+  \item \textbf{Közös tartomány} (\emph{common support/overlap}): $0 < \Prob(T_i = 1 \mid X_i = x) < 1$ minden $x$-re.
+\end{enumerate}
+A propensity score a kezelés valószínűsége a megfigyelt tulajdonságok mellett:
+\[
+  e(x) = \Prob(T = 1 \mid X = x).
+\]
+\textbf{Rosenbaum--Rubin-tétel} (1983): ha teljesül a feltételes függetlenség, akkor
+\begin{enumerate}[nosep]
+  \item (kiegyensúlyozó tulajdonság, \emph{balancing property}) $X \indep T \mid e(X)$,
+  \item $\bigl(Y(1), Y(0)\bigr) \indep T \mid e(X)$.
+\end{enumerate}
+Vagyis elég az $e(X)$ skalárra kondicionálni, nem kell az egész $X$ vektorra.
+
+\subsection*{2.3 Becslés és párosítás}
+
+A propensity score becslése osztályozási feladat, leggyakrabban logisztikus regresszióval:
+\[
+  e(X_i) = \Prob(T_i = 1 \mid X_i)
+  = \frac{1}{1 + \exp\bigl(-(\beta_0 + \beta_1 X_{1i} + \dots + \beta_k X_{ki})\bigr)} \in (0, 1).
+\]
+Ezután minden kezelt egyént párosítunk egy hasonló score-ú nem kezelttel. A két leggyakoribb
+algoritmus a legközelebbi szomszéd (\emph{nearest-neighbour}) és a kernel matching. A párosítás
+után ellenőrizni kell, hogy a minta valóban kiegyensúlyozott lett-e, azaz a párosítás eltüntette-e a csoportok közötti különbségeket az alapjellemzőkben. Ha igen, a párosított csoportok
+kimeneteleinek különbsége becsli a kezelés okozati hatását.
+
+%======================================================================
+\section*{3. Szakirodalmi példák}
+
+\textbf{1. Cikk:} Dehejia, R. H., \& Wahba, S. (1999). \emph{Causal effects in nonexperimental studies:
+Reevaluating the evaluation of training programs.}
+
+Azt vizsgálták, hogy egy amerikai államilag támogatott munkaerőpiaci tréning növeli-e a résztvevők
+jövőbeli jövedelmét. A probléma eredete, hogy a 70-es évek közepén az USA-ban indítottak egy
+drága RCT-t. Sorsolással döntöttek, ki kap képzést, ki boldogul egyedül a munkaerőpiacon,
+az RCT kimutatta a valós pozitív hatást. 1986-ban egy közgazdász vette ennek a National
+Supported Work program adatait, kidobta a kísérlet valódi kontrollcsoportját, helyette vett egy
+országos megfigyelésen alapuló adatbázist. Lineáris regresszióval próbálta kiszámolni a tréning
+valódi hatását, kezelt embereket átlag amerikaiakhoz hasonlítva, negatív hatást kapott. Az
+ellentmondás feloldása az volt, hogy a linkelt tanulmány szerzőpárosa logisztikus regressziót
+épített, hogy megbecsüljék, mekkora esélye (propensity score) lett volna egy átlag amerikainak
+arra, hogy bekerüljön a tréningbe, felhasználva a confoundereket (életkor, iskolai végzettség,
+korábbi jövedelem\dots). A nearest-neighbour matching módszerrel a tréningezett embert egy
+hasonló propensity score-ú átlagos amerikaival (a korábbi torzítást az okozta, hogy a tréningre
+az alacsonyabb társadalmi, kereseti percentilisekből mentek főleg, ez nem volt figyelembe véve).
+Miután a propensity score alapján kidobták a nem összehasonlítható embereket, a tréning
+kimutatott hatása csak 1\%-kal tért el az eredeti tanulmány kimutatott nagy pozitív hatásától.
+
+\textbf{2. Cikk:} Morgan, S. L. (2001). \emph{Counterfactuals, causal effect heterogeneity, and the Catholic
+school effect on learning.} Sociology of Education, 341--374.
+
+Amerikában az volt a közmegegyezés, hogy a katolikus (magán) középiskolák jobb oktatást
+biztosítanak. A katolikus iskolába járó gyerekek kompetencia tesztjei magasan verték az állami
+iskolásokét. A politikusok ebből azt a következtetést vonták le, hogy az állami iskolák sokkal
+rosszabbak a magániskoláknál. Értelemszerűen ezt nem lehetett RCT-vel tesztelni. Egy gyerek
+nem véletlenül kerül magániskolába. A propensity score kiszámításához használt tényezők
+(socioeconomic status, középiskola előtti teszteredmények stb.) együttesen meghatározták, egy
+gyerek mekkora eséllyel köt ki egy katolikus iskolában. A szerző a logisztikus regresszióval kapott
+propensity score alapján nem átlagot vont (ATE), hanem sorba állította a diákokat PS alapján,
+és csoportokra bontotta őket. Ez a stratification matching. A high propensity csoport (tehetős
+szülők, egyetemi elvárások) egyéneire a magániskola hozzáadott értéke elhanyagolható volt. A
+low propensity csoport (szegény család, gyenge korábbi jegyek) tagjainak kis esélyük van fizetős
+iskolába jutni, azonban bejutás esetén a hatás kiemelkedően pozitív volt. Megmutatkozott a hatás
+heterogenitása.
+
+\textbf{3. Cikk:} Gilligan, M. J., \& Sergenti, E. J. (2008). \emph{Do UN interventions cause peace? Using
+matching to improve causal inference.}
+
+Az ENSZ békefenntartás kapcsán a naiv statisztikák azt mutatták, hogy ahol az ENSZ jelen van, ott
+hamarabb kiújul a háború. Ebből politikusok azt szűrték le, hogy a kéksisakosok inkompetensek. A
+szerzők vettek 117 polgárháborút, és logisztikus regresszióval kiszámolták, mekkora valószínűséggel
+menne oda az ENSZ (confounderek: konfliktus hossza, ország megosztottsága, háború előtti
+halálesetek száma). A propensity score matching után, mikor az ENSZ missziókat kizárólag
+magukra hagyott, de \emph{ugyanolyan véres} háborúkkal hasonlították össze, kiderült, hogy az ENSZ
+beavatkozással a béke átlagosan sokkal tovább tart. Common support által ahol nem volt ENSZ,
+tele volt könnyen megoldható esetekkel. Ahol volt ENSZ, ott ilyen esetekből nem volt, mert
+ilyenkor nem avatkozik be, ekkor a PSM ezeket az eseteket kidobta, nem használta számításhoz.
+
+%======================================================================
+\section*{4. Szimuláció és eredmények}
+
+\subsection*{4.1 A szimuláció felépítése}
+
+Minden forgatókönyvben a confounderek független standard normális eloszlásúak, a kezelés logit modellből
+származik, és a kezelés valódi hatása konstans, $\tau = 2$ (így ATE = ATT = 2):
+\[
+  T_i \sim \text{Bernoulli}\bigl(\Lambda(\text{index}_i)\bigr), \qquad
+  Y_i = y_0(X_i) + \tau T_i + \varepsilon_i, \quad \varepsilon_i \sim N(0,1).
+\]
+A propensity score-t logisztikus regresszióval becsüljük. Ezután a PS logitján 1:1 legközelebbi szomszéd
+párosítást végzünk visszatevéssel, mindkét irányban: minden kezeltnek a legközelebbi kontrollt, minden
+kontrollnak a legközelebbi kezeltet keressük meg. Az így kapott egyéni hatások átlaga az ATE-t becsli
+\cite{abadie2006}. Viszonyítási alap a naiv átlagkülönbség. A kiegyensúlyozottságot a standardizált
+átlagkülönbséggel (SMD) mérjük, a szokásos küszöb $|\mathrm{SMD}| < 0{,}1$. Forgatókönyvenként 5000
+Monte Carlo ismétlést futtatunk $n = 10\,000$ megfigyeléssel. Az eredményeket az 1.~táblázat, a
+diagnosztikai ábrákat az 1--5.~ábra mutatja.
+
+\subsection*{4.2 Első adatgeneráló folyamat: a PSM működik}
+
+\textbf{A) Jól specifikált PS-modell.} $\text{index} = 0{,}8X_1 - 0{,}6X_2 + 0{,}5X_3$ és
+$y_0 = 1{,}5X_1 - X_2 + X_3$. Mindhárom confounder megfigyelt, és a becsült logit modell megegyezik a
+valódival. A naiv különbség 1,83-mal felülbecsüli a hatást, mert a kezeltek $X_1$ és $X_3$ szerint
+kedvezőbb helyzetűek. A párosítás után minden |SMD| 0,1 alatt van, a PSM átlagos becslése 2,004,
+a szórása 0,028. A propensity score itt a confounderek teljes torzító hatását kiszűri.
+
+\subsection*{4.3 Második adatgeneráló folyamat: a PSM csődje}
+
+\textbf{B) Rosszul specifikált PS-modell.} A kezelés és a kimenetel is négyzetesen függ a confounderektől:
+$\text{index} = 0{,}6(X_1^2 - 1) + 0{,}6(X_2^2 - 1) + 0{,}3X_3$, $y_0 = 1{,}2X_1^2 + 1{,}2X_2^2 + X_3$.
+A szokásos lineáris logit ezt nem tudja leírni: a becsült PS alig jelzi előre a kezelést
+(AUC = 0,57), és a becslés torzítása 1,96, alig kevesebb, mint a naiv különbségé (2,17). Az $X_1, X_2, X_3$
+változók a párosítás után kiegyensúlyozottnak tűnnek, csak a modellből kimaradt $X_1^2$ és $X_2^2$
+mutatja a problémát. Ha a négyzetes tagokat is bevonjuk, a torzítás 0,03-ra csökken. A hiba tehát
+javítható, de csak akkor, ha a kutató felismeri.
+
+\textbf{C) Meg nem figyelt confounder.} $\text{index} = 0{,}6X_1 - 0{,}5X_2 + U$ és
+$y_0 = X_1 - X_2 + 1{,}5U$, ahol $U$ nem megfigyelt, így sérül a feltételes függetlenség.
+A párosítás után $X_1$ és $X_2$ tökéletesen kiegyensúlyozott, az $U$ viszont nem
+(3.~ábra), a torzítás 1,25 marad. Ha $U$ megfigyelhető lenne, a torzítás 0,005 volna. Ez a legveszélyesebb
+eset, mert a kiegyensúlyozottsági ellenőrzés hamis biztonságot ad, és a probléma az adatokból
+nem mutatható ki.
+
+\textbf{D) Gyenge overlap.} Az A) eset négyszer erősebb szelekcióval, így a PS-ek 0 és 1 közelébe
+szorulnak (AUC = 0,96). Kevés a hasonló pár, ugyanazokat a megfigyeléseket sokszor használjuk fel: a
+torzítás 0,175, a szórás pedig hatszorosa az A) esetének (0,175 vs.\ 0,028). A PS logitjának 0,2 szórásnyi caliperje
+\cite{austin2011} a torzítást 0,01-re csökkenti, de csak a megfigyelések 87\%-át tartja meg. Heterogén
+hatás esetén ez már nem a teljes sokaság ATE-je lenne.
+
+\textbf{E) Instrumentum a PS-modellben.} $\text{index} = 0{,}6X_1 - 0{,}5X_2 + 3Z$ és
+$y_0 = X_1 - X_2$, tehát $Z$ csak a kezelésre hat. A $Z$ bevonása javítja az előrejelzést
+(AUC = 0,92), torzítást nem okoz (2,01), de rontja az overlapet, így a becslés szórása hatszorosára nő
+(0,145 vs.\ 0,024). A jó PS-modell tehát nem a kezelés legjobb előrejelzője, hanem a confoundereket
+tartalmazó modell \cite{brookhart2006}.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Monte Carlo eredmények (5000 ismétlés, $n = 10\,000$, valódi hatás $\tau = 2$)}
+\begin{tabular}{llrrrrr}
+\toprule
+ & Becslő & Átlag & Torzítás & Szórás & RMSE & AUC \\
+\midrule
+A) jól specifikált    & naiv különbség           & 3,833 & 1,833 & 0,042 & 1,834 &       \\
+                      & PSM                      & 2,004 & 0,004 & 0,028 & 0,029 & 0,759 \\
+\addlinespace
+B) rossz specifikáció & naiv különbség           & 4,172 & 2,172 & 0,052 & 2,172 &       \\
+                      & PSM, lineáris logit      & 3,960 & 1,960 & 0,059 & 1,961 & 0,569 \\
+                      & PSM, helyes specifikáció & 2,029 & 0,029 & 0,036 & 0,046 & 0,746 \\
+\addlinespace
+C) rejtett confounder & naiv különbség           & 3,977 & 1,977 & 0,041 & 1,978 &       \\
+                      & PSM, $U$ nélkül          & 3,254 & 1,254 & 0,043 & 1,255 & 0,670 \\
+                      & PSM, $U$-val             & 2,005 & 0,005 & 0,031 & 0,031 & 0,782 \\
+\addlinespace
+D) gyenge overlap     & naiv különbség           & 5,050 & 3,050 & 0,034 & 3,051 &       \\
+                      & PSM                      & 2,175 & 0,175 & 0,175 & 0,247 & 0,957 \\
+                      & PSM, caliper 0,2$^{*}$   & 2,013 & 0,013 & 0,102 & 0,103 & 0,957 \\
+\addlinespace
+E) instrumentum       & naiv különbség           & 2,493 & 0,493 & 0,035 & 0,495 &       \\
+                      & PSM, $Z$-vel             & 2,010 & 0,010 & 0,145 & 0,146 & 0,923 \\
+                      & PSM, $Z$ nélkül          & 2,001 & 0,001 & 0,024 & 0,024 & 0,599 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\footnotesize $^{*}$ A megfigyelések 87\%-a marad meg a párosítás után.
+\end{table}
+
+\abra{A}{A) jól specifikált PS-modell}
+\abra{B}{B) rosszul specifikált PS-modell}
+\abra{C}{C) meg nem figyelt confounder}
+\abra{D}{D) gyenge overlap}
+\abra{E}{E) instrumentum a PS-modellben}
+
+%======================================================================
+\section*{5. Következtetések és limitációk}
+
+A szimulációk alapján a PSM akkor ad torzítatlan becslést, ha (1) minden confounder megfigyelt
+(feltételes függetlenség), (2) a PS-modell helyesen specifikált, és (3) a kezelt és a kontrollcsoport
+PS-eloszlása kellően átfed. Ha ezek teljesülnek, a módszer a naiv összehasonlítás teljes szelekciós
+torzítását kiszűri (A eset).
+
+A feltételek megsértése különböző súlyú. A rossz specifikáció javítható (rugalmasabb modell,
+magasabb rendű tagok és interakciók), de a kutatónak észre kell vennie. A kiegyensúlyozottsági
+ellenőrzés csak a modellbe bevont változókra mond valamit, ezért érdemes a négyzetes tagokra és az
+interakciókra is elvégezni (B eset). A meg nem figyelt confounder okozta torzítást viszont az adatokból sem
+kimutatni, sem kiszűrni nem lehet (C eset). Ez a PSM legfontosabb korlátja: a feltételes függetlenség nem
+tesztelhető, csak elméleti érvekkel támasztható alá. Gyenge overlap esetén a becslés zajos és torzított. A
+caliper ezen segít, de közben megváltoztatja, hogy melyik sokaságra vonatkozik a becslés (D eset). Végül a
+PS-modellbe a confoundereket kell bevonni, nem a kezelés legjobb előrejelzőit: a csak a kezelésre ható
+változók torzítást nem okoznak, de jelentősen növelik a becslés szórását (E eset). Az eredmények
+a párosítási paraméterektől (visszatevés, caliper, párok száma) is függenek.
+
+Szimulációnk egyszerűsítő feltevései: konstans kezelési hatás, normális eloszlású confounderek és logit
+kezelési modell. Heterogén hatásnál az ATE és az ATT eltér, és a caliper vagy a common support miatti
+kizárás a becsült paramétert is megváltoztatja. Lehetséges általánosítások: rugalmasabb PS-modellek
+(pl. gépi tanulási módszerek), az inverz valószínűséggel súlyozás (IPW), valamint a duplán robusztus
+becslők, amelyeknél elég, ha a PS-modell és a kimeneti modell közül az egyik helyes. A meg nem figyelt
+confounderre való érzékenység érzékenységvizsgálattal számszerűsíthető.
+
+%======================================================================
+\begin{thebibliography}{9}\small
+
+\bibitem{abadie2006}
+Abadie, A., \& Imbens, G. W. (2006). Large sample properties of matching estimators for average treatment
+effects. \emph{Econometrica}, 74(1), 235--267.
+
+\bibitem{austin2011}
+Austin, P. C. (2011). Optimal caliper widths for propensity-score matching when estimating differences in
+means and differences in proportions in observational studies. \emph{Pharmaceutical Statistics}, 10(2), 150--161.
+
+\bibitem{brookhart2006}
+Brookhart, M. A., Schneeweiss, S., Rothman, K. J., Glynn, R. J., Avorn, J., \& Stürmer, T. (2006). Variable
+selection for propensity score models. \emph{American Journal of Epidemiology}, 163(12), 1149--1156.
+
+\bibitem{dehejia1999}
+Dehejia, R. H., \& Wahba, S. (1999). Causal effects in nonexperimental studies: Reevaluating the
+evaluation of training programs. \emph{Journal of the American Statistical Association}, 94(448), 1053--1062.
+
+\bibitem{gilligan2008}
+Gilligan, M. J., \& Sergenti, E. J. (2008). Do UN interventions cause peace? Using matching to improve
+causal inference. \emph{Quarterly Journal of Political Science}, 3(2), 89--122.
+
+\bibitem{lalonde1986}
+LaLonde, R. J. (1986). Evaluating the econometric evaluations of training programs with experimental
+data. \emph{American Economic Review}, 76(4), 604--620.
+
+\bibitem{morgan2001}
+Morgan, S. L. (2001). Counterfactuals, causal effect heterogeneity, and the Catholic school effect on
+learning. \emph{Sociology of Education}, 74(4), 341--374.
+
+\bibitem{rosenbaum1983}
+Rosenbaum, P. R., \& Rubin, D. B. (1983). The central role of the propensity score in observational
+studies for causal effects. \emph{Biometrika}, 70(1), 41--55.
+
+\end{thebibliography}
+
+\end{document}

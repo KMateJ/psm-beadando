@@ -1,0 +1,24 @@
+# R / RStudio generált fájlok
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*_cache/
+*_files/
+psm_szimulacio.html
+
+# LaTeX fordítási melléktermékek
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
+
+# macOS szemét és az osztálytárs eredeti zip-je (a tartalma az okonometria/ mappában van)
+.DS_Store
+__MACOSX/
+okonometria.zip
