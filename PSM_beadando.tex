@@ -21,13 +21,21 @@
 \newcommand{\Prob}{\mathbb{P}}
 \newcommand{\indep}{\perp\!\!\!\perp}
 
-% Forgatókönyvenként egy ábrasor (figures/abra-X-1.pdf, az Rmd generálja)
-\newcommand{\abra}[2]{%
+% A szimulációs kód a GitHubon (commithez kötött link, így a sorszámok nem csúsznak el)
+\newcommand{\kodurl}{https://github.com/KMateJ/psm-beadando/blob/1777c530520dd1b15733ab8f1e7eae4fac5e2dac/psm_szimulacio.Rmd?plain=1}
+\newcommand{\kodlink}[2]{\href{\kodurl\##1}{\textcolor{blue}{#2}}}
+
+% Forgatókönyvenként egy ábrasor (figures/abra-X-1, az Rmd generálja), alatta a kódrészek linkjei
+% #1: kód, #2: cím, #3: az adatgeneráló folyamat sorai, #4: a becsült modellek sorai
+\newcommand{\abra}[4]{%
   \begin{figure}[htbp]
     \centering
-    \includegraphics[width=\textwidth]{abra-#1-1.pdf}
+    \includegraphics[width=\textwidth]{abra-#1-1.png}
     \caption{#2. Balra: becsült PS egy mintában; középen: |SMD| párosítás előtt és után
       (szaggatott vonal: 0,1); jobbra: a becslések eloszlása az 5000 ismétlésben (szaggatott vonal: $\tau = 2$).}
+    {\footnotesize Kód: \kodlink{#3}{adatgeneráló folyamat} \textbullet{}
+      \kodlink{#4}{becsült modellek} \textbullet{} \kodlink{L76-L90}{párosítás} \textbullet{}
+      \kodlink{L277-L358}{ábra}}
   \end{figure}}
 
 \setlength{\parindent}{0pt}
@@ -35,9 +43,12 @@
 
 \title{\textbf{Propensity score matching:}\\\textbf{módszer, alkalmazások és korlátok}}
 \author{%
-  \todo{Név 1} (\todo{NEPTUN}, \todo{név1@uni-corvinus.hu})\\
-  \todo{Név 2} (\todo{NEPTUN}, \todo{név2@uni-corvinus.hu})\\
-  \todo{Név 3} (\todo{NEPTUN}, \todo{név3@uni-corvinus.hu})}
+  {Nagy Levenete} ({DU38XD}, {levente.nagy1@stud.uni-corvinus.hu})\\
+  {Kocsis Máté József} ({P6FT0Y}, {mate.kocsis@uni-corvinus.hu})\\
+  {Juhász Ferenc} ({LCRXUR}, {ferenc.juhasz@stud.uni-corvinus.hu})\\
+  {Kolozsvári Bence Tamás} ({CIQV92}, {bence.kolozsvari@stud.uni-corvinus.hu})
+  }
+  
 \date{2026. október 13.}
 
 \begin{document}
@@ -57,14 +68,13 @@ tényezőkön múlik.
 Ilyenkor kiválasztási torzítás (\emph{selection bias}) lép fel, a kezelésre és a kimenetelre egyaránt ható
 zavaró változók (\emph{confounder}-ek) miatt. Ha egyszerűen összehasonlítjuk a kezelt és a nem kezelt
 csoport átlagos kimenetelét, torzított eredményt kapunk, mert a különbség egy része a csoportok
-eredendő különbségeiből fakad. A regressziós kontroll sok változó esetén nehézkes (a dimenzió átka,
-\emph{curse of dimensionality}). A \emph{propensity score matching} (PSM) ezt úgy kezeli, hogy a confoundereket egyetlen változóba, a kezelés valószínűségébe sűríti, és e szerint teszi összehasonlíthatóvá a
+eredendő különbségeiből fakad.
+ Bár a regressziós modellek képesek kontrollálni ezeket a változókra, sok változó esetén ez nehézkes ( dimenzió átka,
+\emph{curse of dimensionality}). A \emph{propensity score matching} (PSM) ezt a problémát úgy kezeli, hogy a confoundereket egyetlen változóba, a kezelés valószínűségébe sűríti, és e szerint teszi összehasonlíthatóvá a
 kezelt és a kontroll megfigyeléseket.
 
 %======================================================================
-\section*{2. Módszertan}
-
-\subsection*{2.1 Potenciális kimenetelek és a szelekciós torzítás}
+\section*{2. Módszertan matematikai megalapozása}
 
 Minden egyénre ($i = 1, \dots, N$) adott a $T_i \in \{0, 1\}$ kezelési indikátor, a megfigyelt confounderek
 $X_i \in \mathbb{R}^p$ vektora, valamint két potenciális kimenetel, $Y_i(1)$ és $Y_i(0)$. A megfigyelt kimenetel
@@ -86,9 +96,6 @@ A megfigyeléses adatokon számolt naiv különbség torzított:
 A naiv becslés tehát csak akkor egyezik meg az ATT-vel, ha a szelekciós torzítás nulla. Ez
 randomizált kísérletben garantált, megfigyeléses adatokban a confounderek miatt általában nem
 teljesül.
-
-\subsection*{2.2 Azonosító feltevések}
-
 A megfigyeléses adatokból oksági hatás becsléséhez két feltevés szükséges:
 \begin{enumerate}[nosep]
   \item \textbf{Feltételes függetlenség} (\emph{unconfoundedness}): $\bigl(Y_i(1), Y_i(0)\bigr) \indep T_i \mid X_i$.
@@ -98,24 +105,22 @@ A propensity score a kezelés valószínűsége a megfigyelt tulajdonságok mell
 \[
   e(x) = \Prob(T = 1 \mid X = x).
 \]
-\textbf{Rosenbaum--Rubin-tétel} (1983): ha teljesül a feltételes függetlenség, akkor
+\textbf{Tétel (Rosenbaum–Rubin, 1983)}: ha teljesül a feltételes függetlenség, akkor
 \begin{enumerate}[nosep]
   \item (kiegyensúlyozó tulajdonság, \emph{balancing property}) $X \indep T \mid e(X)$,
   \item $\bigl(Y(1), Y(0)\bigr) \indep T \mid e(X)$.
 \end{enumerate}
 Vagyis elég az $e(X)$ skalárra kondicionálni, nem kell az egész $X$ vektorra.
-
-\subsection*{2.3 Becslés és párosítás}
-
-A propensity score becslése osztályozási feladat, leggyakrabban logisztikus regresszióval:
+A propensity score becslése egy osztályozási probléma. Azt  valószínűséget akarjuk megbecsülni, hogy egy adott személy – a megfigyelt tulajdonságai alapján – megkapja-e a kezelést vagy sem.
+Ezt leggyakrabban logisztikus regresszióval becsüljük:
 \[
   e(X_i) = \Prob(T_i = 1 \mid X_i)
   = \frac{1}{1 + \exp\bigl(-(\beta_0 + \beta_1 X_{1i} + \dots + \beta_k X_{ki})\bigr)} \in (0, 1).
 \]
-Ezután minden kezelt egyént párosítunk egy hasonló score-ú nem kezelttel. A két leggyakoribb
+Ezután minden kezelt egyént párosítunk egy hasonló score-ú nem kezelttel. A két legelterjedtebb párosítási
 algoritmus a legközelebbi szomszéd (\emph{nearest-neighbour}) és a kernel matching. A párosítás
 után ellenőrizni kell, hogy a minta valóban kiegyensúlyozott lett-e, azaz a párosítás eltüntette-e a csoportok közötti különbségeket az alapjellemzőkben. Ha igen, a párosított csoportok
-kimeneteleinek különbsége becsli a kezelés okozati hatását.
+kimeneteleinek különbsége valóban becsli a kezelés okozati hatását.
 
 %======================================================================
 \section*{3. Szakirodalmi példák}
@@ -133,11 +138,7 @@ valódi hatását, kezelt embereket átlag amerikaiakhoz hasonlítva, negatív h
 ellentmondás feloldása az volt, hogy a linkelt tanulmány szerzőpárosa logisztikus regressziót
 épített, hogy megbecsüljék, mekkora esélye (propensity score) lett volna egy átlag amerikainak
 arra, hogy bekerüljön a tréningbe, felhasználva a confoundereket (életkor, iskolai végzettség,
-korábbi jövedelem\dots). A nearest-neighbour matching módszerrel a tréningezett embert egy
-hasonló propensity score-ú átlagos amerikaival (a korábbi torzítást az okozta, hogy a tréningre
-az alacsonyabb társadalmi, kereseti percentilisekből mentek főleg, ez nem volt figyelembe véve).
-Miután a propensity score alapján kidobták a nem összehasonlítható embereket, a tréning
-kimutatott hatása csak 1\%-kal tért el az eredeti tanulmány kimutatott nagy pozitív hatásától.
+korábbi jövedelem\dots). A nearest-neighbour matching során minden tréningezett személyhez hasonló propensity score-ú, a kontrollcsoportba tartozó személyt párosítottak. A korábbi torzítást az okozta, hogy a tréningre főleg az alacsonyabb jövedelmi és társadalmi percentilisekből érkeztek, ezt nem volt figyelembe véve. Miután a propensity score alapján kizárták a nem összehasonlítható megfigyeléseket, a becsült hatás alig tért el eredeti tanulmány kimutatott nagy pozitív hatásától.
 
 \textbf{2. Cikk:} Morgan, S. L. (2001). \emph{Counterfactuals, causal effect heterogeneity, and the Catholic
 school effect on learning.} Sociology of Education, 341--374.
@@ -164,31 +165,36 @@ hamarabb kiújul a háború. Ebből politikusok azt szűrték le, hogy a kéksis
 szerzők vettek 117 polgárháborút, és logisztikus regresszióval kiszámolták, mekkora valószínűséggel
 menne oda az ENSZ (confounderek: konfliktus hossza, ország megosztottsága, háború előtti
 halálesetek száma). A propensity score matching után, mikor az ENSZ missziókat kizárólag
-magukra hagyott, de \emph{ugyanolyan véres} háborúkkal hasonlították össze, kiderült, hogy az ENSZ
-beavatkozással a béke átlagosan sokkal tovább tart. Common support által ahol nem volt ENSZ,
-tele volt könnyen megoldható esetekkel. Ahol volt ENSZ, ott ilyen esetekből nem volt, mert
-ilyenkor nem avatkozik be, ekkor a PSM ezeket az eseteket kidobta, nem használta számításhoz.
+magukra hagyott, de ugyanolyan véres háborúkkal hasonlították össze, kiderült, hogy az ENSZ
+beavatkozással a béke átlagosan sokkal tovább tart. A common support szerepe: azokat a konfliktusokat, amelyekben az ENSZ egyáltalán nem avatkozik be (jellemzően a könnyen kezelhető esetek), nincs hozzájuk hasonló kezelt eset, ezért kizárja őket az elemzésből. AZ ENSZ-missziók nem véletlenül történnek, jellemzően nehezebb konfliktusokba küldik őket, ezért volt itt csúnya félrevezetés.
 
 %======================================================================
 \section*{4. Szimuláció és eredmények}
-
-\subsection*{4.1 A szimuláció felépítése}
-
 Minden forgatókönyvben a confounderek független standard normális eloszlásúak, a kezelés logit modellből
 származik, és a kezelés valódi hatása konstans, $\tau = 2$ (így ATE = ATT = 2):
 \[
   T_i \sim \text{Bernoulli}\bigl(\Lambda(\text{index}_i)\bigr), \qquad
   Y_i = y_0(X_i) + \tau T_i + \varepsilon_i, \quad \varepsilon_i \sim N(0,1).
 \]
-A propensity score-t logisztikus regresszióval becsüljük. Ezután a PS logitján 1:1 legközelebbi szomszéd
-párosítást végzünk visszatevéssel, mindkét irányban: minden kezeltnek a legközelebbi kontrollt, minden
-kontrollnak a legközelebbi kezeltet keressük meg. Az így kapott egyéni hatások átlaga az ATE-t becsli
+
+ahol $\Lambda(\cdot)$ a standard logisztikus függvény, $y_0(X_i)$ a bázis kimenetel, az $\text{index}_i$ pedig a confounderek lineáris (vagy nemlineáris) kombinációja.
+
+A propensity score-t ($e(X_i)$) logisztikus regresszióval becsüljük. Ezután a PS logitján ($L_i = \text{logit}(e(X_i))$) 1:1 legközelebbi szomszéd párosítást (nearest-neighbor matching) végzünk visszatevéssel, mindkét irányban.
+Minden kezeltnek megkeressük a legközelebbi kontrollt: 
+\[
+j(i) = \arg\min_{j: T_j = 0} |L_i - L_j|
+\]
+Minden kontrollnak megkeressük a legközelebbi kezeltet: 
+\[
+i(j) = \arg\min_{i: T_i = 1} |L_j - L_i|
+\]
+Az így kapott egyéni hatások átlaga az ATE-t becsli
 \cite{abadie2006}. Viszonyítási alap a naiv átlagkülönbség. A kiegyensúlyozottságot a standardizált
 átlagkülönbséggel (SMD) mérjük, a szokásos küszöb $|\mathrm{SMD}| < 0{,}1$. Forgatókönyvenként 5000
 Monte Carlo ismétlést futtatunk $n = 10\,000$ megfigyeléssel. Az eredményeket az 1.~táblázat, a
 diagnosztikai ábrákat az 1--5.~ábra mutatja.
 
-\subsection*{4.2 Első adatgeneráló folyamat: a PSM működik}
+\subsection*{4.1 Első adatgeneráló folyamat: a PSM működik}
 
 \textbf{A) Jól specifikált PS-modell.} $\text{index} = 0{,}8X_1 - 0{,}6X_2 + 0{,}5X_3$ és
 $y_0 = 1{,}5X_1 - X_2 + X_3$. Mindhárom confounder megfigyelt, és a becsült logit modell megegyezik a
@@ -196,7 +202,7 @@ valódival. A naiv különbség 1,83-mal felülbecsüli a hatást, mert a kezelt
 kedvezőbb helyzetűek. A párosítás után minden |SMD| 0,1 alatt van, a PSM átlagos becslése 2,004,
 a szórása 0,028. A propensity score itt a confounderek teljes torzító hatását kiszűri.
 
-\subsection*{4.3 Második adatgeneráló folyamat: a PSM csődje}
+\subsection*{4.2 Második adatgeneráló folyamat: a PSM nem működik}
 
 \textbf{B) Rosszul specifikált PS-modell.} A kezelés és a kimenetel is négyzetesen függ a confounderektől:
 $\text{index} = 0{,}6(X_1^2 - 1) + 0{,}6(X_2^2 - 1) + 0{,}3X_3$, $y_0 = 1{,}2X_1^2 + 1{,}2X_2^2 + X_3$.
@@ -204,26 +210,22 @@ A szokásos lineáris logit ezt nem tudja leírni: a becsült PS alig jelzi elő
 (AUC = 0,57), és a becslés torzítása 1,96, alig kevesebb, mint a naiv különbségé (2,17). Az $X_1, X_2, X_3$
 változók a párosítás után kiegyensúlyozottnak tűnnek, csak a modellből kimaradt $X_1^2$ és $X_2^2$
 mutatja a problémát. Ha a négyzetes tagokat is bevonjuk, a torzítás 0,03-ra csökken. A hiba tehát
-javítható, de csak akkor, ha a kutató felismeri.
+javítható, de csak akkor, ha felismerjük a rossz modellválasztást.
 
 \textbf{C) Meg nem figyelt confounder.} $\text{index} = 0{,}6X_1 - 0{,}5X_2 + U$ és
 $y_0 = X_1 - X_2 + 1{,}5U$, ahol $U$ nem megfigyelt, így sérül a feltételes függetlenség.
 A párosítás után $X_1$ és $X_2$ tökéletesen kiegyensúlyozott, az $U$ viszont nem
-(3.~ábra), a torzítás 1,25 marad. Ha $U$ megfigyelhető lenne, a torzítás 0,005 volna. Ez a legveszélyesebb
-eset, mert a kiegyensúlyozottsági ellenőrzés hamis biztonságot ad, és a probléma az adatokból
+(3.~ábra), a torzítás 1,25 marad. Ha $U$ megfigyelhető lenne, a torzítás 0,005 volna. Ez a legtrükkösebb eset a tesztek látszólagos egyensúlyt mutatnak, és a probléma az adatokból
 nem mutatható ki.
 
-\textbf{D) Gyenge overlap.} Az A) eset négyszer erősebb szelekcióval, így a PS-ek 0 és 1 közelébe
-szorulnak (AUC = 0,96). Kevés a hasonló pár, ugyanazokat a megfigyeléseket sokszor használjuk fel: a
-torzítás 0,175, a szórás pedig hatszorosa az A) esetének (0,175 vs.\ 0,028). A PS logitjának 0,2 szórásnyi caliperje
-\cite{austin2011} a torzítást 0,01-re csökkenti, de csak a megfigyelések 87\%-át tartja meg. Heterogén
-hatás esetén ez már nem a teljes sokaság ATE-je lenne.
+\textbf{D) Gyenge overlap.} Az A) eset négyszer erősebb szelekcióval, így a PS-eket 0 és az 1 felé tolja (AUC = 0,96). Kevés a hasonló pár, ugyanazokat a megfigyeléseket sokszor használjuk fel: a
+torzítás 0,175, a szórás pedig hatszorosa az A) esetének (0,175 vs.\ 0,028). A PS logitján 0,2 szórásnyi calipert alkalmazunk
+\cite{austin2011} a torzítást 0,01-re csökkenti, de csak a megfigyelések 87\%-át tartja meg. 
 
 \textbf{E) Instrumentum a PS-modellben.} $\text{index} = 0{,}6X_1 - 0{,}5X_2 + 3Z$ és
 $y_0 = X_1 - X_2$, tehát $Z$ csak a kezelésre hat. A $Z$ bevonása javítja az előrejelzést
 (AUC = 0,92), torzítást nem okoz (2,01), de rontja az overlapet, így a becslés szórása hatszorosára nő
-(0,145 vs.\ 0,024). A jó PS-modell tehát nem a kezelés legjobb előrejelzője, hanem a confoundereket
-tartalmazó modell \cite{brookhart2006}.
+(0,145 vs.\ 0,024). A lényeg az, hogy a jó PS-modell célja nem a kezelés tökéletes előrejelzése, hanem a rejtett torzítások kiszűrése. \cite{brookhart2006}.
 
 \begin{table}[htbp]
 \centering\small
@@ -257,37 +259,33 @@ E) instrumentum       & naiv különbség           & 2,493 & 0,493 & 0,035 & 0,
 \footnotesize $^{*}$ A megfigyelések 87\%-a marad meg a párosítás után.
 \end{table}
 
-\abra{A}{A) jól specifikált PS-modell}
-\abra{B}{B) rosszul specifikált PS-modell}
-\abra{C}{C) meg nem figyelt confounder}
-\abra{D}{D) gyenge overlap}
-\abra{E}{E) instrumentum a PS-modellben}
+\abra{A}{A) jól specifikált PS-modell}{L120-L126}{L159-L163}
+\abra{B}{B) rosszul specifikált PS-modell}{L128-L136}{L164-L171}
+\abra{C}{C) meg nem figyelt confounder}{L138-L144}{L172-L179}
+\abra{D}{D) gyenge overlap}{L146-L147}{L180-L187}
+\abra{E}{E) instrumentum a PS-modellben}{L149-L155}{L188-L195}
 
 %======================================================================
 \section*{5. Következtetések és limitációk}
 
 A szimulációk alapján a PSM akkor ad torzítatlan becslést, ha (1) minden confounder megfigyelt
-(feltételes függetlenség), (2) a PS-modell helyesen specifikált, és (3) a kezelt és a kontrollcsoport
-PS-eloszlása kellően átfed. Ha ezek teljesülnek, a módszer a naiv összehasonlítás teljes szelekciós
-torzítását kiszűri (A eset).
+(nincs rejtett torzítás), (2) a PS-modell helyesen specifikált, és (3) a kezelt és a kontrollcsoport
+PS-eloszlása kellően átfed. Ha ezek teljesülnek, a PSM a naiv összehasonlítás teljes szelekciós
+torzítását eltünteti (A eset).
 
-A feltételek megsértése különböző súlyú. A rossz specifikáció javítható (rugalmasabb modell,
-magasabb rendű tagok és interakciók), de a kutatónak észre kell vennie. A kiegyensúlyozottsági
+AHa viszont ezek a feltételek sérülnek, a következmények eltérőek lehetnek. A rossz specifikáció javítható (rugalmasabb modell,
+magasabb rendű tagok és interakciók), de ezt észre kell venni. A kiegyensúlyozottsági
 ellenőrzés csak a modellbe bevont változókra mond valamit, ezért érdemes a négyzetes tagokra és az
 interakciókra is elvégezni (B eset). A meg nem figyelt confounder okozta torzítást viszont az adatokból sem
-kimutatni, sem kiszűrni nem lehet (C eset). Ez a PSM legfontosabb korlátja: a feltételes függetlenség nem
-tesztelhető, csak elméleti érvekkel támasztható alá. Gyenge overlap esetén a becslés zajos és torzított. A
-caliper ezen segít, de közben megváltoztatja, hogy melyik sokaságra vonatkozik a becslés (D eset). Végül a
+kimutatni, sem kiszűrni nem lehet (C eset). Ez a PSM legnagyobb korlátja. Gyenge overlap esetén a becslés zajos és torzított. A
+caliper ezen segít, de ilyenkor elveszítjük a minta egy részét (D eset). Végül a
 PS-modellbe a confoundereket kell bevonni, nem a kezelés legjobb előrejelzőit: a csak a kezelésre ható
 változók torzítást nem okoznak, de jelentősen növelik a becslés szórását (E eset). Az eredmények
-a párosítási paraméterektől (visszatevés, caliper, párok száma) is függenek.
+a párosítási paraméterektől (visszatevés, caliper, párok száma, párosítási algoritmus) is függenek.
 
 Szimulációnk egyszerűsítő feltevései: konstans kezelési hatás, normális eloszlású confounderek és logit
 kezelési modell. Heterogén hatásnál az ATE és az ATT eltér, és a caliper vagy a common support miatti
-kizárás a becsült paramétert is megváltoztatja. Lehetséges általánosítások: rugalmasabb PS-modellek
-(pl. gépi tanulási módszerek), az inverz valószínűséggel súlyozás (IPW), valamint a duplán robusztus
-becslők, amelyeknél elég, ha a PS-modell és a kimeneti modell közül az egyik helyes. A meg nem figyelt
-confounderre való érzékenység érzékenységvizsgálattal számszerűsíthető.
+kizárás a becsült paramétert is megváltoztatja. Lehetséges általánosítások: regresszió helyett rugalmasabb, gépi tanulási algoritmusokra bízzuk a modellépítést, párosítás helyett inverz valószínűségi súlyozást (IPW) használunk.
 
 %======================================================================
 \begin{thebibliography}{9}\small
